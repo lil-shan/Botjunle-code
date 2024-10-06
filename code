@@ -1,0 +1,218 @@
+#include <WiFi.h>
+#include <WebServer.h>
+
+// Wi-Fi credentials
+const char* ssid = "ESP32-Network";
+const char* password = "12345678";
+
+// Define motor control pins
+const int motorAForward = 12;
+const int motorABackward = 14;
+const int motorBForward = 27;
+const int motorBBackward = 26;
+
+// Create a web server on port 80
+WebServer server(80);
+
+// HTML content as a separate variable
+String htmlContent = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+  <title>TEAM NAME</title>
+  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+  <style>
+    body { 
+      font-family: 'Trebuchet MS', sans-serif; 
+      text-align: center; 
+      background-color: white;  /* Solid white background */
+      height: 100vh; 
+       padding-top: 30px; 
+      margin: 0; 
+      display: flex; 
+      flex-direction: column;
+      align-items: center; 
+    }
+    h1 { 
+      color: red;  /* Red title for visibility */
+      margin: 20px 0;  /* Space around the header */
+      position: absolute; /* Positioning at the top of the page */
+      top: 40px;  /* Distance from the top */
+      width: 100%;  /* Full width */
+      text-align: center;
+      font-size: 70px; /* Increased font size */
+    }
+    .button { 
+      width: 100px;  /* Increased button width */
+      height: 100px;  /* Increased button height */
+      font-size: 48px;  /* Increased font size for arrows */
+      background-color: white;  /* White button background */
+      color: red;  /* Red arrow text */
+      border: 2px solid red;  /* Red border for better visibility */
+      border-radius: 10px; 
+      margin: 10px;  /* Margin for button positioning */
+      display: inline-block; 
+      user-select: none; 
+      box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);  /* Slight box shadow */
+    }
+    .container { 
+      display: grid; 
+      grid-template-areas: 
+        ' . up . '
+        ' left . right '
+        ' . down . ';
+      grid-gap: 1px;  /* Gap between buttons */
+      justify-items: center; 
+      align-items: center;
+      margin-top: 200px;  /* Space below the header */
+    }
+    .up { grid-area: up; }
+    .left { grid-area: left; }
+    .right { grid-area: right; }
+    .down { grid-area: down; }
+    .button span { pointer-events: none; }  /* Make text inside the button non-interactable */
+    
+    footer {
+      color: red;  /* Footer text color */
+      font-size: 18px;
+      position: absolute;
+      bottom: 10px;  /* Position the footer at the bottom */
+      width: 100%;
+      text-align: center;  /* Center the text */
+    }
+    .footer-text {
+      font-size: 18px;
+    }
+    .footer-bold {
+      font-weight: bold;
+      font-size: 24px;  /* Larger font size for BOTJUNGLE */
+    }
+  </style>
+</head>
+<body>
+  <h1>TEAM NAME</h1>  <!-- Header at the top of the page -->
+  <div class='container'>
+    <button class='button up' ontouchstart='sendRequest("/forward/start")' 
+            ontouchend='sendRequest("/stop")' 
+            onmousedown='sendRequest("/forward/start")' 
+            onmouseup='sendRequest("/stop")'>
+      <span>&#x2191;</span>
+    </button>  <!-- Up Arrow -->
+
+    <button class='button left' ontouchstart='sendRequest("/left/start")' 
+            ontouchend='sendRequest("/stop")' 
+            onmousedown='sendRequest("/left/start")' 
+            onmouseup='sendRequest("/stop")'>
+      <span>&#x2190;</span>
+    </button>  <!-- Left Arrow -->
+
+    <button class='button right' ontouchstart='sendRequest("/right/start")' 
+            ontouchend='sendRequest("/stop")' 
+            onmousedown='sendRequest("/right/start")' 
+            onmouseup='sendRequest("/stop")'>
+      <span>&#x2192;</span>
+    </button>  <!-- Right Arrow -->
+
+    <button class='button down' ontouchstart='sendRequest("/backward/start")' 
+            ontouchend='sendRequest("/stop")' 
+            onmousedown='sendRequest("/backward/start")' 
+            onmouseup='sendRequest("/stop")'>
+      <span>&#x2193;</span>
+    </button>  <!-- Down Arrow -->
+  </div>
+
+  <footer>
+    <div class="footer-text">Powered by</div>
+    <div class="footer-bold">BOTJUNGLE</div>
+  </footer>  <!-- Footer with text at the bottom -->
+  
+  <script>
+    function sendRequest(url) { 
+      var xhr = new XMLHttpRequest(); 
+      xhr.open('GET', url, true); 
+      xhr.send(); 
+    }
+  </script>
+</body>
+</html>
+)rawliteral";
+
+void setup() {
+  Serial.begin(115200);
+
+  // Set up motor control pins as outputs
+  pinMode(motorAForward, OUTPUT);
+  pinMode(motorABackward, OUTPUT);
+  pinMode(motorBForward, OUTPUT);
+  pinMode(motorBBackward, OUTPUT);
+  
+  // Stop motors initially
+  stopMotors();
+
+  // Set up Wi-Fi
+  WiFi.softAP(ssid, password);
+  Serial.println("WiFi setup complete");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.softAPIP());
+
+  // Define server routes
+  server.on("/", HTTP_GET, []() {
+    server.send(200, "text/html", htmlContent); // Reference the HTML variable
+  });
+  
+  // Motor control routes
+  server.on("/forward/start", HTTP_GET, moveForward);
+  server.on("/backward/start", HTTP_GET, moveBackward);
+  server.on("/left/start", HTTP_GET, turnLeft);
+  server.on("/right/start", HTTP_GET, turnRight);
+  server.on("/stop", HTTP_GET, stopMotors); // Common endpoint to stop all actions when button is released
+
+  // Start server
+  server.begin();
+}
+
+void loop() {
+  // Handle client requests
+  server.handleClient();
+}
+
+// Motor control functions
+void moveForward() {
+  digitalWrite(motorAForward, HIGH);
+  digitalWrite(motorABackward, LOW);
+  digitalWrite(motorBForward, HIGH);
+  digitalWrite(motorBBackward, LOW);
+  server.send(200, "text/plain", "Moving Forward");
+}
+
+void moveBackward() {
+  digitalWrite(motorAForward, LOW);
+  digitalWrite(motorABackward, HIGH);
+  digitalWrite(motorBForward, LOW);
+  digitalWrite(motorBBackward, HIGH);
+  server.send(200, "text/plain", "Moving Backward");
+}
+
+void turnRight() {
+  digitalWrite(motorAForward, LOW);
+  digitalWrite(motorABackward, HIGH);
+  digitalWrite(motorBForward, HIGH);
+  digitalWrite(motorBBackward, LOW);
+  server.send(200, "text/plain", "Turning Right");
+}
+
+void turnLeft() {
+  digitalWrite(motorAForward, HIGH);
+  digitalWrite(motorABackward, LOW);
+  digitalWrite(motorBForward, LOW);
+  digitalWrite(motorBBackward, HIGH);
+  server.send(200, "text/plain", "Turning Left");
+}
+
+void stopMotors() {
+  digitalWrite(motorAForward, LOW);
+  digitalWrite(motorABackward, LOW);
+  digitalWrite(motorBForward, LOW);
+  digitalWrite(motorBBackward, LOW);
+  server.send(200, "text/plain", "Motors Stopped");
+}
